@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
-
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'todos_screen.dart';
+import 'profile_screen.dart';
 void main() {
   runApp(MyApp());
 }
@@ -44,7 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => PostListView()),
+        MaterialPageRoute(builder: (context) => HomeScreen()),
       );
     }
   }
@@ -99,6 +103,53 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+class HomeScreen extends StatefulWidget {
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _selectedIndex = 0;
+  static List<Widget> _widgetOptions = <Widget>[
+    PostListView(),
+    TodosScreen(),
+    ProfileScreen(),
+  ];
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: _widgetOptions.elementAt(_selectedIndex),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.post_add),
+            label: 'Posts',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.list),
+            label: 'Todos',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+      ),
+    );
+  }
+}
+
 class Post {
   final int id;
   final String title;
@@ -106,14 +157,41 @@ class Post {
   final String body;
 
   Post({required this.id, required this.title, required this.userId, required this.body});
+
+  factory Post.fromJson(Map<String, dynamic> json) {
+    return Post(
+      id: json['id'],
+      title: json['title'],
+      userId: json['userId'],
+      body: json['body'],
+    );
+  }
 }
 
-class PostListView extends StatelessWidget {
-  final List<Post> posts = [
-    Post(id: 1, title: "sunt aut facere repellat provident occaecati excepturi optio reprehenderit", userId: 1, body: "quia et suscipit\nsuscipit recusandae consequuntur expedita et cum\nreprehenderit molestiae ut ut quas totam\nnostrum rerum est autem sunt rem eveniet architecto"),
-    Post(id: 2, title: "qui est esse", userId: 1, body: "est rerum tempore vitae\nsequi sint nihil reprehenderit dolor beatae ea dolores neque\nfugiat blanditiis voluptate porro vel nihil molestiae ut reiciendis\nqui aperiam non debitis possimus qui neque nisi nulla"),
-    Post(id: 3, title: "ea molestias quasi exercitationem repellat qui ipsa sit aut", userId: 1, body: "et iusto sed quo iure\nvoluptatem occaecati omnis eligendi aut ad\nvoluptatem doloribus vel accusantium quis pariatur\nmolestiae porro eius odio et labore et velit aut"),
-  ];
+class PostListView extends StatefulWidget {
+  @override
+  _PostListViewState createState() => _PostListViewState();
+}
+
+class _PostListViewState extends State<PostListView> {
+  late Future<List<Post>> futurePosts;
+
+  @override
+  void initState() {
+    super.initState();
+    futurePosts = fetchPosts();
+  }
+
+  Future<List<Post>> fetchPosts() async {
+    final response = await http.get(Uri.parse('https://jsonplaceholder.typicode.com/posts'));
+    if (response.statusCode == 200) {
+      List<dynamic> body = jsonDecode(response.body);
+      List<Post> posts = body.map((dynamic item) => Post.fromJson(item)).toList();
+      return posts;
+    } else {
+      throw Exception('Failed to load posts');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,23 +199,63 @@ class PostListView extends StatelessWidget {
       appBar: AppBar(
         title: Text('Posts'),
       ),
-      body: ListView.builder(
-        itemCount: posts.length,
-        itemBuilder: (context, index) {
-          return GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => PostDetailScreen(postId: posts[index].id),
-                ),
-              );
-            },
-            child: ListTile(
-              title: Text(posts[index].title),
-              subtitle: Text('User ID: ${posts[index].userId}'),
-            ),
-          );
+      body: FutureBuilder<List<Post>>(
+        future: futurePosts,
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return ListView.builder(
+              itemCount: snapshot.data!.length,
+              itemBuilder: (context, index) {
+                return Slidable(
+                  key: ValueKey(snapshot.data![index].id),
+                  endActionPane: ActionPane(
+                    motion: ScrollMotion(),
+                    children: [
+                      SlidableAction(
+                        onPressed: (context) {
+                          // TODO: Implement comments functionality
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Comments functionality not implemented yet')),
+                          );
+                        },
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        icon: Icons.comment,
+                        label: 'Comments',
+                      ),
+                      SlidableAction(
+                        onPressed: (context) {
+                          // TODO: Implement save functionality
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Save functionality not implemented yet')),
+                          );
+                        },
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        icon: Icons.save,
+                        label: 'Save',
+                      ),
+                    ],
+                  ),
+                  child: ListTile(
+                    title: Text(snapshot.data![index].title),
+                    subtitle: Text('User ID: ${snapshot.data![index].userId}'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => PostDetailScreen(post: snapshot.data![index]),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            );
+          } else if (snapshot.hasError) {
+            return Center(child: Text("${snapshot.error}"));
+          }
+          return Center(child: CircularProgressIndicator());
         },
       ),
     );
@@ -145,20 +263,36 @@ class PostListView extends StatelessWidget {
 }
 
 class PostDetailScreen extends StatelessWidget {
-  final int postId;
+  final Post post;
 
-  PostDetailScreen({required this.postId});
+  PostDetailScreen({required this.post});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Post Detail'),
+        title: Text(post.title),
       ),
-      body: Center(
-        child: Text(
-          'Post ID: $postId',
-          style: TextStyle(fontSize: 24),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Post ID: ${post.id}',
+              style: TextStyle(fontSize: 24),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'User ID: ${post.userId}',
+              style: TextStyle(fontSize: 18),
+            ),
+            SizedBox(height: 20),
+            Text(
+              post.body,
+              style: TextStyle(fontSize: 16),
+            ),
+          ],
         ),
       ),
     );
